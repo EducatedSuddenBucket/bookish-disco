@@ -1,0 +1,6 @@
+{
+  "name": "unique-username-generator",
+  "dependencies": {
+    "unique-names-generator": "^5.0.0"
+  }
+}
