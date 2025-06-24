@@ -1,0 +1,7 @@
+name = "unique-name-worker"
+type = "modules"
+compatibility_date = "2025-06-24"
+compatibility_flags = ["nodejs_compat"]
+
+[build]
+upload = { format = "modules", dir = "src", main = "shim.mjs" }
