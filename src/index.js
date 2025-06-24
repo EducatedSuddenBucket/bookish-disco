@@ -1,4 +1,4 @@
-const { generateUsername } = require('unique-username-generator');
+const { generateUsername } = require('unique-names-generator');
 const { Buffer } = require('buffer');
 
 function handle(request) {
