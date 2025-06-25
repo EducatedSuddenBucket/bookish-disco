@@ -2,4 +2,3 @@ main = "index.js"
 compatibility_flags = ["nodejs_compat"]
 name = "test"
 compatibility_date = "2025-06-25"
-type = "javascript"
