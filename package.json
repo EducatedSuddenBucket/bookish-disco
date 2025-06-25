@@ -10,7 +10,6 @@
     "author": "{{ authors }}",
     "license": "ISC",
     "dependencies": {
-        "itty-router": "latest",
-        "minecraft-protocol": "latest"
+        "itty-router": "latest"
     }
 }
