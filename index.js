@@ -2,6 +2,6 @@ import { AutoRouter } from 'itty-router'
 
 const router = AutoRouter()
 
-router.get('/', () => 'Success!')
+router.get('/', () => 'Test!')
 
-export default router // see note below
+export default router
