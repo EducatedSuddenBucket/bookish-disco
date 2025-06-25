@@ -1,4 +1,4 @@
-name = "test"
 main = "index.js"
-compatibility_date = "2025-01-28"
 compatibility_flags = ["nodejs_compat"]
+name = "test"
+type = "webpack"
