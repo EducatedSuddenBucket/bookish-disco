@@ -2,3 +2,4 @@ main = "index.js"
 compatibility_flags = ["nodejs_compat"]
 name = "test"
 type = "webpack"
+compatibility_date = "2025-06-25"
