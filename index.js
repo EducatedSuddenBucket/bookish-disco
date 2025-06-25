@@ -1,172 +1,82 @@
-import net from "node:net";
-import dns from "node:dns";
+import { Router } from 'itty-router'
 
-export default {
-  async fetch(request) {
-    const url = new URL(request.url);
-    const match = url.pathname.match(/^\/api\/status\/([^\/]+)$/);
-    if (!match) {
-      return new Response("Not found", { status: 404 });
+// Create a new router
+const router = Router()
+
+/*
+Our index route, a simple hello world.
+*/
+router.get("/", () => {
+  return new Response("Hello, world! This is the root page of your Worker template.")
+})
+
+/*
+This route demonstrates path parameters, allowing you to extract fragments from the request
+URL.
+
+Try visit /example/hello and see the response.
+*/
+router.get("/example/:text", ({ params }) => {
+  // Decode text like "Hello%20world" into "Hello world"
+  let input = decodeURIComponent(params.text)
+
+  // Construct a buffer from our input
+  let buffer = Buffer.from(input, "utf8")
+
+  // Serialise the buffer into a base64 string
+  let base64 = buffer.toString("base64")
+
+  // Return the HTML with the string to the client
+  return new Response(`<p>Base64 encoding: <code>${base64}</code></p>`, {
+    headers: {
+      "Content-Type": "text/html"
     }
+  })
+})
 
-    let [host, port] = match[1].split(":");
-    port = port ? parseInt(port, 10) : 25565;
+/*
+This shows a different HTTP method, a POST.
 
-    try {
-      // 1) Try SRV lookup (_minecraft._tcp.host)
-      const srv = await dns.promises.resolveSrv(`_minecraft._tcp.${host}`)
-        .catch(() => null);
-      if (srv && srv.length) {
-        host = srv[0].name;
-        port = srv[0].port;
-      }
+Try send a POST request using curl or another tool.
 
-      // 2) Ensure host resolves at all
-      await dns.promises.lookup(host);
+Try the below curl command to send JSON:
 
-      // 3) Connect & handshake
-      const serverInfo = await pingJava(host, port);
-
-      // 4) Format response
-      let description = typeof serverInfo.description === 'string'
-        ? serverInfo.description
-        : extractText(serverInfo.description);
-
-      return new Response(JSON.stringify({
-        success: true,
-        version: serverInfo.version,
-        players: {
-          max: serverInfo.players.max,
-          online: serverInfo.players.online,
-          list: serverInfo.players.sample || []
-        },
-        description,
-        description_clean: removeColorCodes(description),
-        latency: serverInfo.latency,
-        favicon: serverInfo.favicon
-      }), {
-        headers: { "Content-Type": "application/json" }
-      });
-
-    } catch (err) {
-      const codeMap = {
-        TIMEOUT: ["timeout","Connection timed out"],
-        ENOTFOUND: ["invalid_domain","Domain could not be resolved"],
-        ECONNREFUSED: ["connection_refused","Connection refused"]
-      };
-      const [code, msg] = codeMap[err.code] || ["offline","Server offline or unreachable"];
-      return new Response(JSON.stringify({
-        success: false,
-        error: { code, message: msg }
-      }), {
-        headers: { "Content-Type": "application/json" }
-      });
-    }
+$ curl -X POST <worker> -H "Content-Type: application/json" -d '{"abc": "def"}'
+*/
+router.post("/post", async request => {
+  // Create a base object with some fields.
+  let fields = {
+    "asn": request.cf.asn,
+    "colo": request.cf.colo
   }
-};
 
-// —————— Helper functions (same as your Express version) ——————
-
-function createVarInt(value) {
-  const bytes = [];
-  while (true) {
-    if ((value & 0xffffff80) === 0) {
-      bytes.push(value);
-      return Buffer.from(bytes);
-    }
-    bytes.push((value & 0x7f) | 0x80);
-    value >>>= 7;
+  // If the POST data is JSON then attach it to our response.
+  if (request.headers.get("Content-Type") === "application/json") {
+    fields["json"] = await request.json()
   }
-}
 
-function createPacket(id, data) {
-  const idBuf = createVarInt(id);
-  const lenBuf = createVarInt(idBuf.length + data.length);
-  return Buffer.concat([lenBuf, idBuf, data]);
-}
+  // Serialise the JSON to a string.
+  const returnData = JSON.stringify(fields, null, 2);
 
-function readVarInt(buf, offset=0) {
-  let value = 0, size = 0, byte;
-  do {
-    byte = buf[offset++];
-    value |= (byte & 0x7f) << (7 * size++);
-    if (size > 5) throw new Error("VarInt too big");
-  } while (byte & 0x80);
-  return [value, offset];
-}
+  return new Response(returnData, {
+    headers: {
+      "Content-Type": "application/json"
+    }
+  })
+})
 
-async function pingJava(host, port) {
-  return new Promise((resolve, reject) => {
-    const sock = new net.Socket();
-    let buffer = Buffer.alloc(0), pingStart;
+/*
+This is the last route we define, it will match anything that hasn't hit a route we've defined
+above, therefore it's useful as a 404 (and avoids us hitting worker exceptions, so make sure to include it!).
 
-    // overall timeout
-    const timer = setTimeout(() => {
-      sock.destroy();
-      const e = new Error("timeout");
-      e.code = "TIMEOUT";
-      reject(e);
-    }, 7000);
+Visit any page that doesn't exist (e.g. /foobar) to see it in action.
+*/
+router.all("*", () => new Response("404, not found!", { status: 404 }))
 
-    sock.setTimeout(7000);
-    sock.connect(port, host, () => {
-      // handshake
-      const hostBuf = Buffer.from(host, "utf8");
-      const portBuf = Buffer.alloc(2);
-      portBuf.writeUInt16BE(port);
-      const handshake = Buffer.concat([
-        createVarInt(-1),
-        createVarInt(hostBuf.length),
-        hostBuf,
-        portBuf,
-        createVarInt(1)
-      ]);
-      sock.write(createPacket(0x00, handshake));
-      sock.write(createPacket(0x00, Buffer.alloc(0))); // status request
-    });
-
-    sock.on("data", data => {
-      buffer = Buffer.concat([buffer, data]);
-      try {
-        let [len, off] = readVarInt(buffer);
-        if (buffer.length < off + len) return; // wait for full packet
-
-        let [pid, off2] = readVarInt(buffer, off);
-        if (pid === 0x00) {
-          // status response
-          let [jlen, off3] = readVarInt(buffer, off2);
-          const json = buffer.slice(off3, off3 + jlen).toString();
-          const info = JSON.parse(json);
-          buffer = buffer.slice(off3 + jlen);
-
-          // ping
-          const payload = Buffer.alloc(8, 0);
-          pingStart = process.hrtime.bigint();
-          sock.write(createPacket(0x01, payload));
-        }
-        else if (pid === 0x01) {
-          // pong
-          const latency = Number(process.hrtime.bigint() - pingStart)/1e6;
-          clearTimeout(timer);
-          sock.destroy();
-          info.latency = Math.round(latency);
-          resolve(info);
-        }
-      } catch (e) {
-        clearTimeout(timer);
-        sock.destroy();
-        reject(e);
-      }
-    });
-
-    sock.on("error", err => { clearTimeout(timer); sock.destroy(); reject(err); });
-    sock.on("timeout", () => {
-      const e = new Error("timeout"); e.code="TIMEOUT";
-      clearTimeout(timer); sock.destroy(); reject(e);
-    });
-  });
-}
-
-// Recursive text extractor & color‐code stripper (same as your Express code)
-function extractText(obj) { /* … */ }
-function removeColorCodes(s) { return s.replace(/§[0-9A-FK-OR]/gi, ""); }
+/*
+This snippet ties our worker to the router we deifned above, all incoming requests
+are passed to the router where your routes are called and the response is sent.
+*/
+addEventListener('fetch', (e) => {
+  e.respondWith(router.handle(e.request))
+})
