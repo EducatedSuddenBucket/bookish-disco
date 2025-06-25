@@ -10,11 +10,7 @@
     },
     "author": "{{ authors }}",
     "license": "ISC",
-    "devDependencies": {
-        "prettier": "^1.17.0"
-    },
     "dependencies": {
-        "itty-router": "latest",
-        "serverless-cloudflare-workers": "^1.2.0"
+        "itty-router": "latest"
     }
 }
