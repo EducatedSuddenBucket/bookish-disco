@@ -1,9 +1,8 @@
-[functions]
-  node_bundler = "esbuild"
-  directory = "."
 [[redirects]]
   force = false
   from = "/*"
   status = 200
   to = "/.netlify/functions/index/:splat"
 
+[edge_functions]
+  directory = "."
