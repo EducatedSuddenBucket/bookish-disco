@@ -305,4 +305,4 @@ router.get('/api/status/:serverAddress', async (request) => {
   }
 })
 
-export default router
+export default router.handle
