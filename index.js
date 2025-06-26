@@ -1,5 +1,5 @@
 import { AutoRouter } from 'itty-router'
-import { connect } from 'node:net'
+import { connect } from 'net'
 
 const router = AutoRouter()
 
